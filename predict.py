@@ -14,7 +14,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_config', type=str, default='./trained_models/model_config.json', help="JSON file with model names.")
     parser.add_argument('-ont', '--ontology', type=str, default=['mf'], nargs='+', required=True, choices=['mf', 'bp', 'cc', 'ec'],
                         help="Gene Ontology/Enzyme Commission.")
-    parser.add_argument('-o', '--output_fn_prefix', type=str, default='DeepFRI', help="Save predictions/saliency in file.")
+    parser.add_argument('-o', '--output_fn_prefix', type=str, default='DeepFRI', help="Save predictions/sa  liency in file.")
     parser.add_argument('-v', '--verbose', help="Prints predictions.", action="store_true")
     parser.add_argument('--use_guided_grads', help="Use guided grads to compute gradCAM.", action="store_true")
     parser.add_argument('--saliency', help="Compute saliency maps for every protein and every MF-GO term/EC number.", action="store_true")

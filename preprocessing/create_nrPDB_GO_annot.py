@@ -1,6 +1,6 @@
 from Bio import SeqIO
 from Bio.Seq import Seq
-from Bio.Alphabet import generic_protein
+# from Bio.Alphabet import generic_protein
 from Bio.SeqRecord import SeqRecord
 
 import networkx as nx
@@ -9,6 +9,7 @@ import argparse
 import obonet
 import gzip
 import csv
+from tqdm import tqdm
 
 
 # ## packages (dependencies):
@@ -19,12 +20,21 @@ import csv
 # pdb_chain_go.tsv (from: https://www.ebi.ac.uk/pdbe/docs/sifts/quick.html)
 # bc-95.out (from: ftp://resources.rcsb.org/sequence/clusters/)
 
-exp_evidence_codes = set(['EXP', 'IDA', 'IPI', 'IMP', 'IGI', 'IEP', 'TAS', 'IC', 'CURATED'])
+exp_evidence_codes = set(['EXP', 'IDA', 'IPI', 'IMP', 'IGI', 'IEP', 'HTP', 'HDA', 'TAS', 'HMP', 'HGI', 'HEP', 'IBA', 'IBD', 'IKR', 'IRD', 'IC', 'ISS', 'ISO', 'ISA', 'ISM', 'IGC' ,'CURATED'])
+dis_evidence = set(['ND', 'NAS', 'IEA'])
 root_terms = set(['GO:0008150', 'GO:0003674', 'GO:0005575'])
-
-
+GOBPO = list(np.load('./data/GOBPO_500.npy',allow_pickle=True))
+GOCCO = list(np.load('./data/GOCCO_500.npy',allow_pickle=True))
+GOMFO = list(np.load('./data/GOMFO_500.npy',allow_pickle=True))
+# GOBPO = list(np.load('./data/train_targets_BPO_top21285.npy',allow_pickle=True))
+# GOCCO = list(np.load('./data/train_targets_CCO_top2957.npy',allow_pickle=True))
+# GOMFO = list(np.load('./data/train_targets_MFO_top7224.npy',allow_pickle=True))
+aa = set(['R', 'X', 'S', 'G', 'W', 'I', 'Q', 'A', 'T', 'V', 'K', 'Y', 'C', 'N', 'L', 'F', 'D', 'M', 'P', 'H', 'E'])
 def read_fasta(fn_fasta):
     aa = set(['R', 'X', 'S', 'G', 'W', 'I', 'Q', 'A', 'T', 'V', 'K', 'Y', 'C', 'N', 'L', 'F', 'D', 'M', 'P', 'H', 'E'])
+    # So B, O, U, Z were missing. There is an explanation to it:
+    # - B is an unambiguous aminoacid (it means it is D or N in the protein) and Z as well (E or Q). In the real world, they behave very differently. 
+    # - U is selenocysteine and O is pyrrolysine, they are rare aminoacids that were removed because of its rarity (we know a little about them, they behave differently from standard ones)
     prot2seq = {}
     if fn_fasta.endswith('gz'):
         handle = gzip.open(fn_fasta, "rt")
@@ -34,11 +44,11 @@ def read_fasta(fn_fasta):
     for record in SeqIO.parse(handle, "fasta"):
         seq = str(record.seq)
         prot = record.id
-        pdb, chain = prot.split('_') if '_' in prot else prot.split('-')
+        pdb, chain = prot.split('_',1) if '_' in prot else prot.split('-')
         prot = pdb.upper() + '-' + chain
-        if len(seq) >= 60 and len(seq) <= 1000:
-            if len((set(seq).difference(aa))) == 0:
-                prot2seq[prot] = seq
+        # if len(seq) <= 1200:
+        if len((set(seq).difference(aa))) == 0:
+            prot2seq[prot] = seq
 
     return prot2seq
 
@@ -71,7 +81,7 @@ def load_pdbs(sifts_fname):
         reader = csv.reader(tsvfile, delimiter='\t')
         next(reader, None)  # skip the headers
         next(reader, None)  # skip the headers
-        for row in reader:
+        for row in tqdm(reader, position=0, leave=True):
             pdb = row[0].strip().upper()
             chain = row[1].strip()
             pdb_chains.add(pdb + '-' + chain)
@@ -82,7 +92,7 @@ def load_clusters(fname):
     pdb2clust = {}  # (c_idx, rank)
     c_ind = 1
     fRead = open(fname, 'r')
-    for line in fRead:
+    for line in tqdm(fRead, position=0, leave=True):
         clust = line.strip().split()
         clust = [p.replace('_', '-') for p in clust]
         for rank, p in enumerate(clust):
@@ -110,23 +120,23 @@ def read_sifts(fname, chains, go_graph):
     print ("### Loading SIFTS annotations...")
     pdb2go = {}
     go2info = {}
+    # x = []
     with gzip.open(fname, mode='rt') as tsvfile:
-        reader = csv.reader(tsvfile, delimiter='\t')
+        reader = csv.reader(tsvfile,delimiter='\t')
         next(reader, None)  # skip the headers
         next(reader, None)  # skip the headers
-        for row in reader:
+        for row in tqdm(reader, position=0, leave=True):
             pdb = row[0].strip().upper()
             chain = row[1].strip()
             evidence = row[4].strip()
             go_id = row[5].strip()
             pdb_chain = pdb + '-' + chain
-            if (pdb_chain in chains) and (go_id in go_graph) and (go_id not in root_terms):
+            if (pdb_chain in chains) and (go_id in go_graph) and (go_id in GOBPO or go_id in GOCCO or go_id in GOMFO):
                 if pdb_chain not in pdb2go:
                     pdb2go[pdb_chain] = {'goterms': [go_id], 'evidence': [evidence]}
                 namespace = go_graph.nodes[go_id]['namespace']
                 go_ids = nx.descendants(go_graph, go_id)
                 go_ids.add(go_id)
-                go_ids = go_ids.difference(root_terms)
                 for go in go_ids:
                     pdb2go[pdb_chain]['goterms'].append(go)
                     pdb2go[pdb_chain]['evidence'].append(evidence)
@@ -135,6 +145,8 @@ def read_sifts(fname, chains, go_graph):
                         go2info[go] = {'ont': namespace, 'goname': name, 'pdb_chains': set([pdb_chain])}
                     else:
                         go2info[go]['pdb_chains'].add(pdb_chain)
+        # print(len(pdb2go))
+        # print(len(x))
     return pdb2go, go2info
 
 
@@ -147,9 +159,9 @@ def write_output_files(fname, pdb2go, go2info, pdb2seq):
         prots = go2info[goterm]['pdb_chains']
         num = len(prots)
         namespace = go2info[goterm]['ont']
-        if num > 49 and num <= 5000:
-            selected_goterms[namespace].add(goterm)
-            selected_proteins = selected_proteins.union(prots)
+        # if num > 49 and num <= 5000:
+        selected_goterms[namespace].add(goterm)
+        selected_proteins = selected_proteins.union(prots)
     """
     for chain in pdb2go:
         goterms = set(pdb2go[chain]['goterms'])
@@ -171,7 +183,7 @@ def write_output_files(fname, pdb2go, go2info, pdb2seq):
 
     sequences_list = []
     protein_list = []
-    with open(fname + '_annot.tsv', 'wt') as out_file:
+    with open(fname + '_annot.tsv', 'wt',newline='') as out_file:
         tsv_writer = csv.writer(out_file, delimiter='\t')
         for ont in onts:
             tsv_writer.writerow(["### GO-terms (%s)" % (ont)])
@@ -180,14 +192,15 @@ def write_output_files(fname, pdb2go, go2info, pdb2seq):
             tsv_writer.writerow(selected_gonames_list[ont])
         tsv_writer.writerow(["### PDB-chain", "GO-terms (molecular_function)", "GO-terms (biological_process)", "GO-terms (cellular_component)"])
         for chain in selected_proteins:
+            # if len(pdb2seq[chain])<=1200:
             goterms = set(pdb2go[chain]['goterms'])
-            if len(goterms) > 2:
+            # if len(goterms) > 2:
                 # selected goterms
-                mf_goterms = goterms.intersection(set(selected_goterms_list[onts[0]]))
-                bp_goterms = goterms.intersection(set(selected_goterms_list[onts[1]]))
-                cc_goterms = goterms.intersection(set(selected_goterms_list[onts[2]]))
-                if len(mf_goterms) > 0 or len(bp_goterms) > 0 or len(cc_goterms) > 0:
-                    sequences_list.append(SeqRecord(Seq(pdb2seq[chain], generic_protein), id=chain, description="nrPDB"))
+            mf_goterms = goterms.intersection(set(selected_goterms_list[onts[0]]))
+            bp_goterms = goterms.intersection(set(selected_goterms_list[onts[1]]))
+            cc_goterms = goterms.intersection(set(selected_goterms_list[onts[2]]))
+            if len(mf_goterms) > 0 or len(bp_goterms) > 0 or len(cc_goterms) > 0:
+                    sequences_list.append(SeqRecord(Seq(pdb2seq[chain]), id=chain, description="nrPDB"))
                     protein_list.append(chain)
                     tsv_writer.writerow([chain, ','.join(mf_goterms), ','.join(bp_goterms), ','.join(cc_goterms)])
 
@@ -221,12 +234,12 @@ def write_output_files(fname, pdb2go, go2info, pdb2seq):
         if len(mf_goterms) > 0 and len(bp_goterms) > 0 and len(cc_goterms) > 0:
             if sum(mf_evidence) > 0 and sum(bp_evidence) > 0 and sum(cc_evidence) > 0:
                 test_list.add(protein_list[i])
-                test_sequences_list.append(SeqRecord(Seq(pdb2seq[protein_list[i]], generic_protein), id=protein_list[i], description="nrPDB_test"))
+                test_sequences_list.append(SeqRecord(Seq(pdb2seq[protein_list[i]]), id=protein_list[i], description="nrPDB_test"))
         i += 1
 
     print ("Total number of test nrPDB=%d" % (len(test_list)))
 
-    protein_list = list(set(protein_list).difference(test_list))
+    # protein_list = list(set(protein_list).difference(test_list))
     np.random.shuffle(protein_list)
 
     idx = int(0.9*len(protein_list))
@@ -238,20 +251,22 @@ def write_output_files(fname, pdb2go, go2info, pdb2seq):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-sifts', type=str, default='./data/pdb_chain_go_2019.06.18.tsv.gz', help="SIFTS annotation files.")
+    parser.add_argument('-sifts', type=str, default='./data/pdb_chain_go.tsv.gz', help="SIFTS annotation files.")
     parser.add_argument('-bc', type=str, default='./data/bc-95.out', help="Blastclust of PDB chains.")
     parser.add_argument('-seqres', type=str, default='./data/pdb_seqres.txt.gz', help="PDB chain seqres fasta.")
     parser.add_argument('-obo', type=str, default='./data/go-basic.obo', help="Gene Ontology hierarchy.")
-    parser.add_argument('-out', type=str, default='./data/nrPDB-GO_2019.06.18', help="Output filename prefix.")
+    parser.add_argument('-out', type=str, default='./data/CAFA_kaggle', help="Output filename prefix.")
     args = parser.parse_args()
 
     annoted_chains = load_pdbs(args.sifts)
     pdb2clust = load_clusters(args.bc)
     pdb2seq = read_fasta(args.seqres)
+    # pdb2seq['7QV1-2']
     nr_chains = nr_set(annoted_chains, pdb2clust)
+    
     print ("### nrPDB annotated chains=", len(nr_chains))
 
     go_graph = load_go_graph(args.obo)
     pdb2go, go2info = read_sifts(args.sifts, nr_chains, go_graph)
-
+    
     write_output_files(args.out, pdb2go, go2info, pdb2seq)

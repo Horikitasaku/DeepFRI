@@ -9,24 +9,32 @@ import numpy as np
 from deepfrier.DeepCNN import DeepCNN
 from deepfrier.utils import seq2onehot
 from deepfrier.utils import load_GO_annot, load_EC_annot
+import tensorflow as tf
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError as e:
+        print(e)
 
 if __name__ == "__main__":
     # Training settings
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-n', '--num_filters', type=int, default=[120, 100, 80, 60], nargs='+', help="Number of filters per Conv layer.")
-    parser.add_argument('-l', '--filter_lens', type=int, default=[5, 10, 15, 20], nargs='+', help="Filter lengths.")
+    parser.add_argument('-n', '--num_filters', type=int, default=[256,256,256,256,256,256,256,256,256,256,256,256,256,256,256,256], nargs='+', help="Number of filters per Conv layer.")
+    parser.add_argument('-l', '--filter_lens', type=int, default=[8, 16, 25, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128], nargs='+', help="Filter lengths.")
     parser.add_argument('-drop', '--dropout', type=float, default=0.3, help="Dropout rate.")
-    parser.add_argument('-l2', '--l2_reg', type=float, default=1e-4, help="L2 regularization coefficient.")
+    parser.add_argument('-l2', '--l2_reg', type=float, default=2e-4, help="L2 regularization coefficient.")
     parser.add_argument('--lr', type=float, default=0.0002, help="Initial learning rate.")
-    parser.add_argument('-e', '--epochs', type=int, default=200, help="Number of epochs to train.")
-    parser.add_argument('-bs', '--batch_size', type=int, default=64, help="Batch size.")
+    parser.add_argument('-e', '--epochs', type=int, default=60, help="Number of epochs to train.")
+    parser.add_argument('-bs', '--batch_size', type=int, default=16, help="Batch size.")
     parser.add_argument('-pd', '--pad_len', type=int, help="Padd length.")
     parser.add_argument('-ont', '--ontology', type=str, default='mf', choices=['mf', 'bp', 'cc', 'ec'], help="Ontology.")
     parser.add_argument('--model_name', type=str, default='CNN-PDB_MF', help="Name of the CNN model.")
     parser.add_argument('-lm', '--lm_model_name', type=str, help="Path to the pretraned LSTM-Language Model.")
-    parser.add_argument('--train_tfrecord_fn', type=str, default="/mnt/ceph/users/vgligorijevic/ContactMaps/TFRecords/PDB_GO_train", help="Train tfrecords.")
-    parser.add_argument('--valid_tfrecord_fn', type=str, default="/mnt/ceph/users/vgligorijevic/ContactMaps/TFRecords/PDB_GO_valid", help="Valid tfrecords.")
-    parser.add_argument('--annot_fn', type=str, default="./preprocessing/data/nrPDB-GO_2019.06.18_annot.tsv", help="File (*tsv) with GO term annotations.")
+    parser.add_argument('--train_tfrecord_fn', type=str, default="./preprocessing/data/ContactMaps/TFRecords/PDB_GO_train", help="Train tfrecords.")
+    parser.add_argument('--valid_tfrecord_fn', type=str, default="./preprocessing/data/ContactMaps/TFRecords/PDB_GO_valid", help="Valid tfrecords.")
+    parser.add_argument('--annot_fn', type=str, default="./preprocessing/data/CAFA_kaggle_annot.tsv", help="File (*tsv) with GO term annotations.")
     parser.add_argument('--test_list', type=str, default="./preprocessing/data/nrPDB-GO_2019.06.18_test.csv", help="File with test PDB chains.")
 
     args = parser.parse_args()
@@ -68,32 +76,32 @@ if __name__ == "__main__":
         out_params['gonames'] = gonames
         json.dump(out_params, fw, indent=1)
 
-    Y_pred = []
-    Y_true = []
-    proteins = []
-    path = '/mnt/home/vgligorijevic/Projects/NewMethods/Contact_maps/DeepFRIer2/preprocessing/data/annot_pdb_chains_npz/'
-    with open(args.test_list, mode='r') as csv_file:
-        csv_reader = csv.reader(csv_file, delimiter=',')
-        next(csv_reader, None)  # header
-        for row in csv_reader:
-            prot = row[0]
-            if os.path.isfile(path + prot + '.npz'):
-                cmap = np.load(path + prot + '.npz')
-                sequence = str(cmap['seqres'])
-                S = seq2onehot(sequence)
+    # Y_pred = []
+    # Y_true = []
+    # proteins = []
+    # path = '/mnt/home/vgligorijevic/Projects/NewMethods/Contact_maps/DeepFRIer2/preprocessing/data/annot_pdb_chains_npz/'
+    # with open(args.test_list, mode='r') as csv_file:
+    #     csv_reader = csv.reader(csv_file, delimiter=',')
+    #     next(csv_reader, None)  # header
+    #     for row in csv_reader:
+    #         prot = row[0]
+    #         if os.path.isfile(path + prot + '.npz'):
+    #             cmap = np.load(path + prot + '.npz')
+    #             sequence = str(cmap['seqres'])
+    #             S = seq2onehot(sequence)
 
-                # ##
-                S = S.reshape(1, *S.shape)
+    #             # ##
+    #             S = S.reshape(1, *S.shape)
 
-                # results
-                proteins.append(prot)
-                Y_pred.append(model.predict(S).reshape(1, output_dim))
-                Y_true.append(prot2annot[prot][args.ontology].reshape(1, output_dim))
+    #             # results
+    #             proteins.append(prot)
+    #             Y_pred.append(model.predict(S).reshape(1, output_dim))
+    #             Y_true.append(prot2annot[prot][args.ontology].reshape(1, output_dim))
 
-    pickle.dump({'proteins': np.asarray(proteins),
-                 'Y_pred': np.concatenate(Y_pred, axis=0),
-                 'Y_true': np.concatenate(Y_true, axis=0),
-                 'ontology': args.ontology,
-                 'goterms': goterms,
-                 'gonames': gonames},
-                open(args.model_name + '_results.pckl', 'wb'))
+    # pickle.dump({'proteins': np.asarray(proteins),
+    #              'Y_pred': np.concatenate(Y_pred, axis=0),
+    #              'Y_true': np.concatenate(Y_true, axis=0),
+    #              'ontology': args.ontology,
+    #              'goterms': goterms,
+    #              'gonames': gonames},
+    #             open(args.model_name + '_results.pckl', 'wb'))

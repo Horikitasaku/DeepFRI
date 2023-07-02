@@ -102,8 +102,8 @@ class DeepCNN(object):
         es = tf.keras.callbacks.EarlyStopping(monitor='val_loss', mode='min', patience=5)
 
         # model checkpoint
-        mc = tf.keras.callbacks.ModelCheckpoint(self.model_name_prefix + '_best_train_model.h5', monitor='val_loss', mode='min', verbose=2,
-                                                save_best_only=True, save_weights_only=True)
+        mc = tf.keras.callbacks.ModelCheckpoint(self.model_name_prefix + '_best_train_model.hdf5', monitor='val_loss', mode='min', verbose=2,
+                                                save_best_only=True, save_weights_only=False)
 
         # fit model
         history = self.model.fit(batch_train,

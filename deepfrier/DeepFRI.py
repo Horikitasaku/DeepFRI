@@ -105,7 +105,8 @@ class DeepFRI(object):
         optimizer = tf.keras.optimizers.Adam(learning_rate=lr, beta_1=0.95, beta_2=0.99)
         pred_loss = tf.keras.losses.CategoricalCrossentropy()
         self.model.compile(optimizer=optimizer, loss=pred_loss, metrics=['acc'])
-        print (self.model.summary())
+        print(self.model.summary())
+        print('???')
 
     def train(self, train_tfrecord_fn, valid_tfrecord_fn,
               epochs=100, batch_size=64, pad_len=1200, cmap_type='ca', cmap_thresh=10.0, ont='mf', class_weight=None):
@@ -139,8 +140,8 @@ class DeepFRI(object):
         es = tf.keras.callbacks.EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=5)
 
         # model checkpoint
-        mc = tf.keras.callbacks.ModelCheckpoint(self.model_name_prefix + '_best_train_model.h5', monitor='val_loss', mode='min', verbose=1,
-                                                save_best_only=True, save_weights_only=True)
+        mc = tf.keras.callbacks.ModelCheckpoint(self.model_name_prefix + '_best_train_model.hdf5', monitor='val_loss', mode='min', verbose=1,
+                                                save_best_only=True, save_weights_only=False)
 
         # fit model
         history = self.model.fit(batch_train,

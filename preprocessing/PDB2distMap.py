@@ -101,6 +101,14 @@ def load_list(fname):
 
     return pdb_chain_list
 
+def load_generated(out_dir=None):
+    """
+    Load *.npz already exist
+    """
+    filenames = os.listdir(out_dir)
+    generated = [filename.replace('.npz','') for filename in filenames if filename.endswith('.npz')]
+    print(f'## Alredy exist: {len(generated)}')
+    return generated
 
 def write_annot_npz(prot, prot2seq=None, out_dir=None):
     """
@@ -120,12 +128,14 @@ def write_annot_npz(prot, prot2seq=None, out_dir=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-annot', type=str, help="Input file (*.tsv) with preprocessed annotations.")
+    parser.add_argument('-annot',default='./data/CAFA_kaggle.tsv', type=str, help="Input file (*.tsv) with preprocessed annotations.")
     parser.add_argument('-ec', help="Use EC annotations.", action="store_true")
     parser.add_argument('-seqres', type=str, default='./data/pdb_seqres.txt.gz', help="PDB chain seqres fasta.")
     parser.add_argument('-num_threads', type=int, default=20, help="Number of threads (CPUs) to use in the computation.")
-    parser.add_argument('-bc', type=str, help="Clusters of PDB chains computd by Blastclust.")
+    parser.add_argument('-bc', type=str,default='./data/bc-95.out' ,help="Clusters of PDB chains computd by Blastclust.")
     parser.add_argument('-out_dir', type=str, default='./data/annot_pdb_chains_npz/', help="Output directory with distance maps saved in *.npz format.")
+    parser.add_argument('-load', type=bool, default=False, help="Whether to load.")
+    
     args = parser.parse_args()
 
     # load annotations
@@ -147,6 +157,7 @@ if __name__ == '__main__':
         pdb2clust = load_clusters(args.bc)
         clusters = set([pdb2clust[prot][0] for prot in prot2goterms])
         print ("### number of annotated clusters: %d" % (len(clusters)))
+    out_dir = args.out_dir
 
     """
     # extracting unannotated proteins
@@ -158,6 +169,10 @@ if __name__ == '__main__':
     """
 
     to_be_processed = set(prot2seq.keys())
+    if args.load:
+        exitsnpz = set(load_generated(out_dir=out_dir))
+        to_be_processed = to_be_processed.difference(exitsnpz)
+        print(f"### number of omission:{len(clusters)}")
     if len(prot2goterms) != 0:
         to_be_processed = to_be_processed.intersection(set(prot2goterms.keys()))
     if len(prot2goterms) != 0:
@@ -167,13 +182,21 @@ if __name__ == '__main__':
 
     # process on multiple cpus
     nprocs = args.num_threads
-    out_dir = args.out_dir
+    
     import multiprocessing
+    from multiprocessing import set_start_method
+    set_start_method('forkserver',force=True)
+    from tqdm import tqdm
+    
     nprocs = np.minimum(nprocs, multiprocessing.cpu_count())
+    print(nprocs)
+    pbar = tqdm(total=len(to_be_processed))
     if nprocs > 4:
         pool = multiprocessing.Pool(processes=nprocs)
-        pool.map(partial(write_annot_npz, prot2seq=prot2seq, out_dir=out_dir),
-                 to_be_processed)
+        for _ in pool.imap_unordered(partial(write_annot_npz,prot2seq=prot2seq, out_dir=out_dir),
+                     to_be_processed):
+            pbar.update()
     else:
         for prot in to_be_processed:
             write_annot_npz(prot, prot2seq=prot2seq, out_dir=out_dir)
+

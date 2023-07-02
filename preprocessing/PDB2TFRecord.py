@@ -44,7 +44,7 @@ def load_GO_annot(filename):
     prot2annot = {}
     goterms = {ont: [] for ont in onts}
     gonames = {ont: [] for ont in onts}
-    with open(filename, mode='r') as tsvfile:
+    with open(filename, mode='r',encoding='utf-8') as tsvfile:
         reader = csv.reader(tsvfile, delimiter='\t')
 
         # molecular function
@@ -150,7 +150,7 @@ class GenerateTFRecord(object):
     def _convert_numpy_folder(self, idx):
         tfrecord_fn = self.tfrecord_fn + '_%0.2d-of-%0.2d.tfrecords' % (idx, self.num_shards)
         # writer = tf.python_io.TFRecordWriter(tfrecord_fn)
-        writer = tf.io.TFRecordWriter(tfrecord_fn)
+        writer = tf.io.TFRecordWriter(tfrecord_fn, encoding='utf-8')
         print ("### Serializing %d examples into %s" % (len(self.prot_list), tfrecord_fn))
 
         tmp_prot_list = self.prot_list[self.indices[idx][0]:self.indices[idx][1]]
@@ -160,7 +160,7 @@ class GenerateTFRecord(object):
                 print ("### Iter = %d/%d" % (i, len(tmp_prot_list)))
             pdb_file = self.npz_dir + '/' + prot + '.npz'
             if os.path.isfile(pdb_file):
-                cmap = np.load(pdb_file)
+                cmap = np.load(str(pdb_file))
                 sequence = str(cmap['seqres'])
                 ca_dist_matrix = cmap['C_alpha']
                 cb_dist_matrix = cmap['C_beta']
@@ -174,20 +174,21 @@ class GenerateTFRecord(object):
     def run(self, num_threads):
         pool = multiprocessing.Pool(processes=num_threads)
         shards = [idx for idx in range(0, self.num_shards)]
+        self._convert_numpy_folder(shards[0])
         pool.map(self._convert_numpy_folder, shards)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-annot', type=str, default='./data/nrPDB-GO_2020.06.18_annot.tsv', help="Input file (*.tsv) with preprocessed annotations.")
+    parser.add_argument('-annot', type=str, default='./data/CAFA_kaggle_annot.tsv', help="Input file (*.tsv) with preprocessed annotations.")
     parser.add_argument('-ec', help="Use EC annotations.", action="store_true")
-    parser.add_argument('-prot_list', type=str, default='./data/nrPDB-GO_2019.06.18_train.txt',
+    parser.add_argument('-prot_list', type=str, default='./data/CAFA_kaggle_train.txt',
                         help="Input file (*.txt) with a set of protein IDs with distMAps in npz_dir.")
     parser.add_argument('-npz_dir', type=str, default='./data/annot_pdb_chains_npz/',
                         help="Directory with distance maps saved in *.npz format to be loaded.")
     parser.add_argument('-num_threads', type=int, default=20, help="Number of threads (CPUs) to use in the computation.")
     parser.add_argument('-num_shards', type=int, default=20, help="Number of tfrecord files per protein set.")
-    parser.add_argument('-tfr_prefix', type=str, default='/mnt/ceph/users/vgligorijevic/ContactMaps/TFRecords/PDB_GO_train',
+    parser.add_argument('-tfr_prefix', type=str, default='.data/ContactMaps/TFRecords/PDB_GO_train',
                         help="Directory with tfrecord files for model training.")
     args = parser.parse_args()
 

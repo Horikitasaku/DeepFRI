@@ -190,6 +190,8 @@ See files in: `examples/outputs/`
 To train *DeepFRI* run the following command from the project directory:
 ```
 >> python train_DeepFRI.py -h
+# os.chdir('/kaggle/working/DeepFRI-CAFA')
+# !python train_DeepFRI.py -gcd 512 512 512 -fcd 2048 -gc MultiGraphConv -ont bp -lm ./trained_models/lstm_lm.hdf5 --model_name CAFA-500-BP --train_tfrecord_fn ./preprocessing/data/ContactMaps/TFRecords/PDB_GO_train --valid_tfrecord_fn ./preprocessing/data/ContactMaps/TFRecords/PDB_GO_valid --annot_fn ./preprocessing/data/CAFA_kaggle_annot.tsv
 ```
 
 or to launch jobs run the following script:
